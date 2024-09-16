@@ -190,7 +190,7 @@ def handle_new_pull_request(pr_data):
         pr_id = pr_data.get('id')
         title = pr_data.get('title')
         body = pr_data.get('body')
-        repo_name = pr_data['head']['repo']['full_name']
+        repo_name = pr_data['head']['repo']['name']
         pr_url = pr_data.get('html_url')
         pr_status = pr_data.get('state')
 
