@@ -216,9 +216,9 @@ def handle_new_pull_request(pr_data):
             # Post AI comments to GitHub
             # post_github_comment(pr_data, ai_review_result)
 
-        return jsonify({'message': 'Pull request handled successfully'}), 200
+        return 'Pull request handled successfully', 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return str(e), 500
 
 
 @app.route('/github-webhook', methods=['POST'])
@@ -244,7 +244,7 @@ def github_webhook():
             try:
                 response = handle_new_pull_request(pr_data)
                 # Log the response from handling the PR
-                app.logger.info(f"Handled pull request. Response: {response.get_json()}")
+                app.logger.info(f"Handling pull request. Response: {response}")
                 return response
             except Exception as e:
                 app.logger.error(f"Error handling pull request: {str(e)}")
