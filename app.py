@@ -98,7 +98,6 @@ def github_login():
     return jsonify({"url": github_login_url}), 200  
 
 @app.route('/github_auth', methods=['GET'])
-@jwt_required()
 def github_auth():
     code = request.args.get('code')
     if not code:
