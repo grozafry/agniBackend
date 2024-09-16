@@ -86,23 +86,43 @@ def create_pull_request_webhook(repo_owner, repo_name, access_token):
     else:
         print(f"Failed to create webhook: {response.json()}")
 
+import uuid
+
 @app.route('/github/login', methods=['GET'])
 @jwt_required()
 def github_login():
+    user_id = get_jwt_identity()
+    # state = str(uuid.uuid4())  # Generate a unique state value
+    # Save the state and user_id mapping in a temporary store or database
+    state=user_id
+    
     github_authorize_url = "https://github.com/login/oauth/authorize"
     client_id = app.config['GITHUB_APP_CLIENT_ID']
     redirect_uri = app.config['GITHUB_OAUTH_REDIRECT_URI']
     
-    github_login_url = f"{github_authorize_url}?client_id={client_id}&redirect_uri={redirect_uri}&scope=repo"
-    
+    github_login_url = f"{github_authorize_url}?client_id={client_id}&redirect_uri={redirect_uri}&scope=repo&state={state}"
     return jsonify({"url": github_login_url}), 200  
+
+
+
+def get_user_id_by_state(state):
+    return state
 
 @app.route('/github_auth', methods=['GET'])
 def github_auth():
     code = request.args.get('code')
-    if not code:
-        return jsonify({"error": "No code provided"}), 400
+    state = request.args.get('state')
+    
+    if not code or not state:
+        return jsonify({"error": "Missing code or state"}), 400
 
+    # Retrieve the user_id associated with the state from your temporary store or database
+    user_id = get_user_id_by_state(state)  # Implement this function based on how you store state
+
+    if not user_id:
+        return jsonify({"error": "Invalid state"}), 400
+
+    # Exchange code for access token
     token_url = "https://github.com/login/oauth/access_token"
     client_id = app.config['GITHUB_APP_CLIENT_ID']
     client_secret = app.config['GITHUB_APP_CLIENT_SECRET']
@@ -116,19 +136,21 @@ def github_auth():
     }
     
     headers = {'Accept': 'application/json'}
-    
     token_response = requests.post(token_url, json=payload, headers=headers)
     token_json = token_response.json()
     
     if 'access_token' in token_json:
         access_token = token_json['access_token']
-        user_id = get_jwt_identity()
         user = User.query.get(user_id)
-        user.github_access_token = access_token
-        db.session.commit()
-        return jsonify({"msg": "Access token saved successfully"}), 200
+        if user:
+            user.github_access_token = access_token
+            db.session.commit()
+            return jsonify({"msg": "Access token saved successfully"}), 200
+        else:
+            return jsonify({"error": "User not found"}), 404
     else:
         return jsonify({"error": "Failed to get access token"}), 400
+
 
 @app.route('/repositories', methods=['POST'])
 @jwt_required()
