@@ -208,7 +208,7 @@ def handle_new_pull_request(pr_data):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/github-webhook', methods=['POST'])
 def github_webhook():
     # Verify webhook signature to ensure it's from GitHub
     signature = request.headers.get('X-Hub-Signature-256')
