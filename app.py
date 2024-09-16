@@ -19,6 +19,8 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 app.config['GITHUB_APP_CLIENT_ID'] = 'Ov23lillPKobH57kEAu5'
 app.config['GITHUB_APP_CLIENT_SECRET'] = 'cc8186d6f2f87a1693b69c502f9333948775e96d'
 app.config['GITHUB_OAUTH_REDIRECT_URI'] = 'http://43.204.130.30:7174/github_auth'
+app.config['WEBHOOK_SECRET'] = 'agshekcm'
+
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
@@ -76,9 +78,9 @@ def create_pull_request_webhook(repo_owner, repo_name, access_token):
         "active": True,
         "events": ["pull_request"],
         "config": {
-            "url": "https://your-saas-tool.com/github-webhook",
+            "url": "http://43.204.130.30:7174/github-webhook",
             "content_type": "json",
-            "secret": "your_webhook_secret"
+            "secret": app.config['WEBHOOK_SECRET']
         }
     }
     
@@ -168,35 +170,101 @@ def add_repository():
 
     return jsonify({"msg": "Repository added and webhook created successfully", "id": repo.id}), 201
 
-@app.route('/github-webhook', methods=['POST'])
+
+def handle_new_pull_request(pr_data):
+    try:
+        # Extract data from GitHub webhook payload
+        pr_id = pr_data.get('id')
+        title = pr_data.get('title')
+        body = pr_data.get('body')
+        repo_name = pr_data['head']['repo']['full_name']
+        pr_url = pr_data.get('html_url')
+        pr_status = pr_data.get('state')
+
+        # Check if the pull request already exists in the DB
+        existing_pr = PullRequest.query.filter_by(id=pr_id).first()
+
+        if existing_pr is None:
+            # Save the new pull request to the database
+            new_pr = PullRequest(
+                id=pr_id,
+                title=title,
+                description=body,
+                repository_name=repo_name,
+                status=pr_status,
+                github_url=pr_url
+            )
+            db.session.add(new_pr)
+            db.session.commit()
+
+            # Perform AI review on the pull request
+            # ai_review_result = perform_ai_review(pr_data)
+            
+            # Post AI comments to GitHub
+            # post_github_comment(pr_data, ai_review_result)
+
+        return jsonify({'message': 'Pull request handled successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/webhook', methods=['POST'])
 def github_webhook():
-    signature = request.headers.get('X-Hub-Signature')
-    
-    if not verify_signature(request.data, signature):
-        return "Signature verification failed", 403
-    
+    # Verify webhook signature to ensure it's from GitHub
+    signature = request.headers.get('X-Hub-Signature-256')
+    if not is_github_signature_valid(request.data, signature):
+        return jsonify({'error': 'Invalid signature'}), 400
+
+    # Handle the GitHub PR event
     event = request.headers.get('X-GitHub-Event')
-    payload = request.json
-    
     if event == 'pull_request':
-        action = payload['action']
-        pr_number = payload['number']
-        pr_title = payload['pull_request']['title']
-        pr_user = payload['pull_request']['user']['login']
+        payload = request.json
+        action = payload.get('action')
         
+        # Only handle "opened" PRs for now
         if action == 'opened':
-            print(f"New pull request #{pr_number} by {pr_user}: {pr_title}")
-        elif action == 'closed':
-            merged = payload['pull_request']['merged']
-            if merged:
-                print(f"Pull request #{pr_number} has been merged.")
-            else:
-                print(f"Pull request #{pr_number} has been closed without merging.")
+            pr_data = payload.get('pull_request', {})
+            return handle_new_pull_request(pr_data)
     
-    return jsonify({"status": "Webhook received"}), 200
+    return jsonify({'message': 'Event not handled'}), 200
+
+def is_github_signature_valid(payload, signature):
+    if signature is None:
+        return False
+    sha_name, signature = signature.split('=')
+    if sha_name != 'sha256':
+        return False
+    mac = hmac.new(app.config['WEBHOOK_SECRET'].encode(), payload, hashlib.sha256)
+    return hmac.compare_digest(mac.hexdigest(), signature)
+
+@app.route('/repositories', methods=['GET'])
+@jwt_required()
+def get_repositories():
+    try:
+        repositories = Repository.query.all()
+        repo_list = [{"id": repo.id, "name": repo.name, "url": repo.url, "organization_id": repo.organization_id} for repo in repositories]
+        return jsonify({"repositories": repo_list}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/pullrequests', methods=['GET'])
+def get_pull_requests():
+    try:
+        # Retrieve all pull requests from the database
+        pull_requests = PullRequest.query.all()
+        pr_list = [{
+            'id': pr.id,
+            'title': pr.title,
+            'repository_name': pr.repository.name,
+            'status': pr.status
+        } for pr in pull_requests]
+
+        return jsonify(pr_list), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 def verify_signature(payload, signature):
-    mac = hmac.new(app.config['JWT_SECRET_KEY'].encode(), msg=payload, digestmod=hashlib.sha1)
+    mac = hmac.new(app.config['WEBHOOK_SECRET'].encode(), msg=payload, digestmod=hashlib.sha1)
     return hmac.compare_digest('sha1=' + mac.hexdigest(), signature)
 
 if __name__ == '__main__':
