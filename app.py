@@ -22,6 +22,19 @@ app.config['GITHUB_OAUTH_REDIRECT_URI'] = 'http://43.204.130.30:7174/github_auth
 app.config['WEBHOOK_SECRET'] = 'agshekcm'
 
 
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Set up logging
+
+handler = RotatingFileHandler('github_webhook.log', maxBytes=100000, backupCount=1)
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+app.logger.addHandler(handler)
+
+
+
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 migrate = Migrate(app, db)
@@ -210,9 +223,13 @@ def handle_new_pull_request(pr_data):
 
 @app.route('/github-webhook', methods=['POST'])
 def github_webhook():
+    # Log the incoming request
+    app.logger.info(f"Received webhook request: {request.data.decode('utf-8')}")
+    
     # Verify webhook signature to ensure it's from GitHub
     signature = request.headers.get('X-Hub-Signature-256')
     if not is_github_signature_valid(request.data, signature):
+        app.logger.warning('Invalid signature detected.')
         return jsonify({'error': 'Invalid signature'}), 400
 
     # Handle the GitHub PR event
@@ -224,9 +241,17 @@ def github_webhook():
         # Only handle "opened" PRs for now
         if action == 'opened':
             pr_data = payload.get('pull_request', {})
-            return handle_new_pull_request(pr_data)
+            try:
+                response = handle_new_pull_request(pr_data)
+                # Log the response from handling the PR
+                app.logger.info(f"Handled pull request. Response: {response.get_json()}")
+                return response
+            except Exception as e:
+                app.logger.error(f"Error handling pull request: {str(e)}")
+                return jsonify({'error': 'Internal server error'}), 500
     
     return jsonify({'message': 'Event not handled'}), 200
+
 
 def is_github_signature_valid(payload, signature):
     if signature is None:
