@@ -73,6 +73,7 @@ class PullRequest(db.Model):
     status = db.Column(db.String(20), nullable=False)
     repository_id = db.Column(db.Integer, db.ForeignKey('repository.id'), nullable=False)
     ai_comments = db.relationship('AIComment', backref='pull_request', lazy=True)
+    url = db.Column(db.String(200), nullable=False)
 
 class AIComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -207,7 +208,7 @@ def handle_new_pull_request(pr_data):
                 description=body,
                 repository_id=repository.id,
                 status=pr_status,
-                github_url=pr_url
+                url=pr_url
             )
             db.session.add(new_pr)
             db.session.commit()
