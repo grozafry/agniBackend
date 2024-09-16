@@ -73,7 +73,7 @@ class PullRequest(db.Model):
     status = db.Column(db.String(20), nullable=False)
     repository_id = db.Column(db.Integer, db.ForeignKey('repository.id'), nullable=False)
     ai_comments = db.relationship('AIComment', backref='pull_request', lazy=True)
-    url = db.Column(db.String(200), nullable=False)
+    url = db.Column(db.String(200), nullable=True)
 
 class AIComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
