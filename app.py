@@ -194,6 +194,8 @@ def handle_new_pull_request(pr_data):
         pr_url = pr_data.get('html_url')
         pr_status = pr_data.get('state')
 
+        repository = Repository.query.filter_by(name=repo_name).first()
+
         # Check if the pull request already exists in the DB
         existing_pr = PullRequest.query.filter_by(id=pr_id).first()
 
@@ -203,7 +205,7 @@ def handle_new_pull_request(pr_data):
                 id=pr_id,
                 title=title,
                 description=body,
-                repository_name=repo_name,
+                repository_id=repository.id,
                 status=pr_status,
                 github_url=pr_url
             )
