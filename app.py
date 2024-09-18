@@ -8,11 +8,13 @@ from flask_cors import CORS
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import timedelta
+from dotenv import load_dotenv
 import os
 import json
 import openai
 import datetime
 
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
