@@ -489,10 +489,10 @@ def get_ai_comments(pr_id):
 #     mac = hmac.new(app.config['WEBHOOK_SECRET'].encode(), msg=payload, digestmod=hashlib.sha1)
 #     return hmac.compare_digest('sha1=' + mac.hexdigest(), signature)
 
-# if __name__ == '__main__':
-#     with app.app_context():
-#         db.create_all()
-#     app.run(debug=True)
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
 
 
 
