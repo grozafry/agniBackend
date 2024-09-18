@@ -279,9 +279,9 @@ def signup():
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
-    organizationName = data.get('organisationName')
+    organizationName = data.get('organisationName')  # Ensure this matches your field name
 
-    # Check if username is provided
+    # Check if all details are provided
     if not username or not password or not email or not organizationName:
         return jsonify(message='All details are required'), 400
 
@@ -289,18 +289,21 @@ def signup():
     if User.query.filter_by(username=username).first():
         return jsonify(message='Username already exists'), 400
 
-    # Create a new user
+    # Create a new organization
     new_org = Organization(name=organizationName)
-    
-    new_user = User(username=username, email=email, organization_id=new_org.id)
+    db.session.add(new_org)
+    db.session.commit()  # Commit to get the organization ID
+
+    # Create a new user
+    new_user = User(username=username, email=email, organization=new_org)  # Use the organization instance
     new_user.set_password(password)
 
     # Add and commit the new user to the database
     db.session.add(new_user)
-    db.session.add(new_org)
     db.session.commit()
 
     return jsonify(message='User created successfully'), 201
+
 
 @app.route('/auth/login', methods=['POST'])
 def login():
