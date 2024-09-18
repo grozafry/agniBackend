@@ -279,21 +279,25 @@ def signup():
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
+    organizationName = data.get('organisationName')
 
     # Check if username is provided
-    if not username or not password:
-        return jsonify(message='Username and password are required'), 400
+    if not username or not password or not email or not organizationName:
+        return jsonify(message='All details are required'), 400
 
     # Check if the username already exists
     if User.query.filter_by(username=username).first():
         return jsonify(message='Username already exists'), 400
 
     # Create a new user
-    new_user = User(username=username, email=email)
+    new_org = Organization(name=organizationName)
+    
+    new_user = User(username=username, email=email, organization_id=new_org.id)
     new_user.set_password(password)
 
     # Add and commit the new user to the database
     db.session.add(new_user)
+    db.session.add(new_org)
     db.session.commit()
 
     return jsonify(message='User created successfully'), 201
