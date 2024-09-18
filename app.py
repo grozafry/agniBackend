@@ -266,12 +266,37 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
                 app.logger.error(f"Error parsing AI response for file: {file['filename']}")
                 app.logger.error(f"Raw response: {review_comments}")
         
-        db_pull_request.status='reviewed'
+        db_pull_request.status='AI Reviewed'
         db.session.commit()
 
     except Exception as e:
         app.logger.error(f"Error processing pull request: {str(e)}")
         db.session.rollback()
+
+@app.route('/auth/signup', methods=['POST'])
+def signup():
+    data = request.json
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+
+    # Check if username is provided
+    if not username or not password:
+        return jsonify(message='Username and password are required'), 400
+
+    # Check if the username already exists
+    if User.query.filter_by(username=username).first():
+        return jsonify(message='Username already exists'), 400
+
+    # Create a new user
+    new_user = User(username=username, email=email)
+    new_user.set_password(password)
+
+    # Add and commit the new user to the database
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify(message='User created successfully'), 201
 
 @app.route('/auth/login', methods=['POST'])
 def login():
@@ -292,7 +317,7 @@ def login():
 @app.route('/auth/logout', methods=['POST'])
 @jwt_required()
 def logout():
-    jti = get_jwt_identity()['jti']  # Get the unique token identifier
+    # jti = get_jwt_identity()['jti']  # Get the unique token identifier
     # blacklist.add(jti)  # Add the token to the blacklist
     response = jsonify({'msg': 'Successfully logged out'})
     # unset_jwt_cookies(response)
@@ -382,7 +407,7 @@ def github_webhook():
                     title=pr_data.get('title'),
                     description=pr_data.get('body'),
                     repository_id=repo.id,
-                    status='pending',
+                    status='Pending',
                     url=pr_data.get('html_url')
                 )
                 db.session.add(new_pr)
@@ -441,7 +466,7 @@ def get_pull_requests():
         # Retrieve all pull requests from the database
         repo_id = request.args.get('repo_id', None)
         user = User.query.get(get_jwt_identity())
-        if repo_id is None:
+        if repo_id is None or repo_id == "" or repo_id == "null":
             pull_requests = PullRequest.query.join(Repository).filter(
                 Repository.organization_id == user.organization_id
             ).all()
