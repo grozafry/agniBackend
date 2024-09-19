@@ -188,32 +188,28 @@ def get_pr_files(repo_owner, repo_name, pr_number, installation_id):
 
 def analyze_code_changes(file_patch):
     """Analyze code changes using OpenAI's GPT-3.5 and generate line-specific comments."""
-    return json.dumps([
-    {
-        "line_number": 21,
-        "comment": "Consider removing comments that do not provide meaningful information or are irrelevant to the functionality of the repository. Comments like this can clutter the code and reduce readability."
-    },
-    {
-        "line_number": 22,
-        "comment": "Avoid leaving comments such as 'These comments are of no consequence.' It's best practice to add comments that explain why certain code exists, describe complex logic, or note important details, rather than trivial remarks."
-    }
-]
-)
-    prompt = f"Analyze the following code changes and provide a code review with line-specific comments. Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:\n\n{file_patch}\n\nCode Review:"
+#     return json.dumps([
+#     {
+#         "line_number": 21,
+#         "comment": "Consider removing comments that do not provide meaningful information or are irrelevant to the functionality of the repository. Comments like this can clutter the code and reduce readability."
+#     },
+#     {
+#         "line_number": 22,
+#         "comment": "Avoid leaving comments such as 'These comments are of no consequence.' It's best practice to add comments that explain why certain code exists, describe complex logic, or note important details, rather than trivial remarks."
+#     }
+# ]
+# )
+    prompt = f"You are a Senior Software Engineer conducting a code review. Analyze the following code changes and provide a code review with line-specific comments. Provide specific, actionable feedback. Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:\n\n{file_patch}\n\nCode Review:"
+    import os 
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    import google.generativeai as genai
     
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a senior software engineer conducting a code review. Provide specific, actionable feedback."},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=1000,
-        n=1,
-        stop=None,
-        temperature=0.7,
-    )
-    
-    return response.choices[0].message['content'].strip()
+
+    genai.configure(api_key=gemini_api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(prompt)
+    print(response.text)
+    return response.text
 
 def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body, line, installation_id):
     """Post a review comment to the GitHub PR."""
@@ -520,6 +516,73 @@ def get_ai_comments(pr_id):
 # def verify_signature(payload, signature):
 #     mac = hmac.new(app.config['WEBHOOK_SECRET'].encode(), msg=payload, digestmod=hashlib.sha1)
 #     return hmac.compare_digest('sha1=' + mac.hexdigest(), signature)
+
+@app.route('/test_openai', methods=['GET'])
+def test_openai():
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    file_patch = "print('hello world! Hey doc is how are you today?')"
+    prompt = f"Analyze the following code changes and provide a code review with line-specific comments. Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:\n\n{file_patch}\n\nCode Review:"
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a senior software engineer conducting a code review. Provide specific, actionable feedback."},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=1000,
+        n=1,
+        stop=None,
+        temperature=0.7,
+    )
+    
+    return response.choices[0].message['content'].strip()
+
+@app.route('/test_anthropic', methods=['GET'])
+def test_anthropic():
+    """Analyze code changes using Anthropic's Claude and generate line-specific comments."""
+    
+    file_patch = "print(2/0)"
+    prompt = f"""Analyze the following code changes and provide a code review with line-specific comments. 
+    Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:\n\n{file_patch}\n\nCode Review:"""
+    
+    # Set the API key from environment variable
+    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    import anthropic
+    # Create an Anthropic client
+    client = anthropic.Client(api_key=anthropic_api_key)
+    
+    # Create the prompt and send the request
+    response = client.completions.create(
+        model="claude-v1",  # Specify the Claude model
+        prompt=f"{anthropic.HUMAN_PROMPT} {prompt} {anthropic.AI_PROMPT}",
+        max_tokens_to_sample=1000,
+        temperature=0.7,
+    )
+    
+    # Return the generated content (strip any extra spaces or newlines)
+    return response['completion'].strip()
+
+@app.route('/test_gemini', methods=['GET'])
+def test_gemini():
+    """Analyze code changes using Anthropic's Claude and generate line-specific comments."""
+    
+    file_patch = """
+def myfun(a, b):
+    return a/0
+"""
+    prompt = f"""Analyze the following code changes and provide a code review with line-specific comments. 
+    Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:\n\n{file_patch}\n\nCode Review:"""
+    
+    # Set the API key from environment variable
+    import os 
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    import google.generativeai as genai
+    
+
+    genai.configure(api_key=gemini_api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(prompt)
+    print(response.text)
+    return response.text
 
 if __name__ == '__main__':
     with app.app_context():
