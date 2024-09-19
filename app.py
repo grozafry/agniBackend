@@ -208,8 +208,9 @@ def analyze_code_changes(file_patch):
     genai.configure(api_key=gemini_api_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content(prompt)
-    print(response.text)
-    return response.text
+    cleaned_response = response.text.strip().strip('```json').strip('```').strip()
+    print(cleaned_response)
+    return cleaned_response
 
 def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body, line, installation_id):
     """Post a review comment to the GitHub PR."""
@@ -565,12 +566,13 @@ def test_anthropic():
 def test_gemini():
     """Analyze code changes using Anthropic's Claude and generate line-specific comments."""
     
+
     file_patch = """
 def myfun(a, b):
     return a/0
 """
     prompt = f"""Analyze the following code changes and provide a code review with line-specific comments. 
-    Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:\n\n{file_patch}\n\nCode Review:"""
+    Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:{file_patch}Code Review:"""
     
     # Set the API key from environment variable
     import os 
@@ -582,7 +584,8 @@ def myfun(a, b):
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content(prompt)
     print(response.text)
-    return response.text
+    cleaned_response = response.text.strip().strip('```json').strip('```').strip()
+    return cleaned_response
 
 if __name__ == '__main__':
     with app.app_context():
