@@ -63,6 +63,7 @@ class User(db.Model):
 
 class Organization(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    git_org_id = db.Column(db.String(80), nullable=True) #org id from github
     name = db.Column(db.String(80), unique=True, nullable=False)
     users = db.relationship('User', backref='organization', lazy=True)
     repositories = db.relationship('Repository', backref='organization', lazy=True)
@@ -76,6 +77,7 @@ class Repository(db.Model):
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
     pull_requests = db.relationship('PullRequest', backref='repository', lazy=True)
     added_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    is_deleted = db.Column(db.Boolean, default=False)
 
 class PullRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -85,6 +87,9 @@ class PullRequest(db.Model):
     repository_id = db.Column(db.Integer, db.ForeignKey('repository.id'), nullable=False)
     ai_comments = db.relationship('AIComment', backref='pull_request', lazy=True)
     url = db.Column(db.String(200), nullable=True)
+    pull_request_diff = db.Column(db.Text, nullable=True)
+    llm_response = db.Column(db.Text, nullable=True)
+    llm_response_time = db.Column(db.DateTime, nullable=True)
 
 class AIComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -93,7 +98,8 @@ class AIComment(db.Model):
     line_number = db.Column(db.Integer, nullable=False)
     pull_request_id = db.Column(db.Integer, db.ForeignKey('pull_request.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.datetime.now)
-
+    severity = db.Column(db.String(20), nullable=True)
+    category = db.Column(db.String(20), nullable=True)
 
 
 import uuid
@@ -199,7 +205,7 @@ def analyze_code_changes(file_patch):
 #     }
 # ]
 # )
-    prompt = f"You are a Senior Software Engineer conducting a code review. Analyze the following code changes and provide a code review with line-specific comments. Provide specific, actionable feedback. Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:\n\n{file_patch}\n\nCode Review:"
+    prompt = f"""You are a Senior Software Engineer conducting a code review. Analyze the following code changes and provide a code review with line-specific comments (get line number from code  diff) . Provide specific, actionable feedback. Format your response as a list of JSON objects, each containing 'line_number', 'category', 'severity', 'comment' fields. Category should be one of these - Security,Functionality,Performance,Maintainability,Scalability,Compatibilit,Accessibility,Internationalization and Localization,Testing,Code Style,Regulatory Compliance. Severity should be one of these - Critical, High, Medium, Low, Informational:{file_patch}Code Review:"""
     import os 
     gemini_api_key = os.getenv("GEMINI_API_KEY")
     import google.generativeai as genai
@@ -212,11 +218,11 @@ def analyze_code_changes(file_patch):
     print(cleaned_response)
     return cleaned_response
 
-def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body, line, installation_id):
+def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body, line, category, severity, installation_id):
     """Post a review comment to the GitHub PR."""
     url = f"{app.config['GITHUB_API_BASE']}/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/comments"
     data = {
-        "body": body,
+        "body": f"[{severity} - {category}] {body}",
         "commit_id": commit_id,
         "path": path,
         "line": line
@@ -229,10 +235,13 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
         commit_id = pr['head']['sha']
         
         files = get_pr_files(repo_owner, repo_name, pr_number, installation_id)
+
+        all_review_comments = []
         
         for file in files:
             review_comments = analyze_code_changes(file['patch'])
-            
+            all_review_comments.append(review_comments)
+
             try:
                 comments_list = json.loads(review_comments)
                 for comment in comments_list:
@@ -245,6 +254,8 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
                         file['filename'],
                         comment['comment'],
                         comment['line_number'],
+                        comment['category'],
+                        comment['severity'],
                         installation_id
                     )
                     
@@ -253,6 +264,8 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
                         content=comment['comment'],
                         file_name=file['filename'],
                         line_number=comment['line_number'],
+                        category=comment['category'],
+                        severity=comment['severity'],
                         pull_request_id=db_pull_request.id
                     )
                     db.session.add(db_comment)
@@ -264,6 +277,7 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
                 app.logger.error(f"Raw response: {review_comments}")
         
         db_pull_request.status='AI Reviewed'
+        db_pull_request.llm_response = json.dumps(all_review_comments)
         db.session.commit()
 
     except Exception as e:
@@ -372,8 +386,13 @@ def github_after_auth_code():
     organization = Organization.query.filter_by(id=user.organization_id).first()
     organization.installation_id = installation_id
     for repo in repository_data:
-        Repository(name=repo["name"], url=repo["html_url"], repo_id=repo["id"], added_by=user_id, organization_id=user.organization_id)
-        db.session.add(Repository(name=repo["name"], url=repo["html_url"], repo_id=repo["id"], added_by=user_id, organization_id=user.organization_id))
+        if Repository.query.filter_by(repo_id=repo["id"]).first() is None:
+            repo_obj = Repository(name=repo["name"], url=repo["html_url"], repo_id=repo["id"], added_by=user_id, organization_id=user.organization_id)
+            db.session.add(repo_obj)
+        else:
+            repo_obj = Repository.query.filter_by(repo_id=repo["id"]).first()
+            repo_obj.is_deleted = False
+
     db.session.commit()
 
     # return jsonify({"msg": "Repositories added successfully"}), 200
@@ -457,7 +476,7 @@ def get_repositories():
     try:
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
-        repositories = Repository.query.filter_by(organization_id=user.organization_id).all()
+        repositories = Repository.query.filter_by(organization_id=user.organization_id, is_deleted=False).all()
         repo_list = [{"id": repo.repo_id, "name": repo.name, "url": repo.url, "organization_id": repo.organization_id} for repo in repositories]
         return jsonify({"repositories": repo_list}), 200
     except Exception as e:
@@ -472,12 +491,14 @@ def get_pull_requests():
         user = User.query.get(get_jwt_identity())
         if repo_id is None or repo_id == "" or repo_id == "null":
             pull_requests = PullRequest.query.join(Repository).filter(
-                Repository.organization_id == user.organization_id
+                Repository.organization_id == user.organization_id,
+                Repository.is_deleted == False
             ).all()
         else:
             pull_requests = PullRequest.query.join(Repository).filter(
                 Repository.repo_id == repo_id,
-                Repository.organization_id == user.organization_id
+                Repository.organization_id == user.organization_id,
+                Repository.is_deleted == False
             ).all()
         
         pr_list = [{
