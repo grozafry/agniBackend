@@ -13,6 +13,8 @@ import os
 import json
 import openai
 import datetime
+from sqlalchemy import func
+
 
 load_dotenv()
 
@@ -535,9 +537,38 @@ def get_ai_comments(pr_id):
         # Handle unexpected errors
         return jsonify({"error": str(e)}), 500
 
-# def verify_signature(payload, signature):
-#     mac = hmac.new(app.config['WEBHOOK_SECRET'].encode(), msg=payload, digestmod=hashlib.sha1)
-#     return hmac.compare_digest('sha1=' + mac.hexdigest(), signature)
+@app.route('/api/metrics', methods=['GET'])
+@jwt_required()
+def get_metrics():
+    from_date = request.args.get('from', default=(datetime.datetime.now() - datetime.timedelta(days=365)).strftime('%Y-%m-%d'))
+    to_date = request.args.get('to', default=datetime.datetime.now().strftime('%Y-%m-%d'))
+
+    try:
+        from_date = datetime.datetime.strptime(from_date, '%Y-%m-%d')
+        to_date = datetime.datetime.strptime(to_date, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+
+    metrics = db.session.query(
+        func.strftime('%Y-%m', AIComment.created_at).label('month'),
+        func.count(AIComment.id).label('count')
+    ).join(PullRequest).join(Repository).filter(
+        Repository.organization_id == user.organization_id,
+        AIComment.created_at.between(from_date, to_date)
+    ).group_by(func.strftime('%Y-%m', AIComment.created_at)).all()
+
+    result = [
+        {
+            'date': f"{month}-01",  # Add day to make it a valid date
+            'count': count
+        }
+        for month, count in metrics
+    ]
+
+    return jsonify(result)
 
 @app.route('/test_openai', methods=['GET'])
 def test_openai():
