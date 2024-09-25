@@ -496,7 +496,7 @@ def get_repositories():
         for repo in repositories:
             # Query the latest llm_response_time for the repository's pull requests
             last_reviewed_pr = PullRequest.query.filter_by(repository_id=repo.id).order_by(PullRequest.llm_response_time.desc()).first()
-            count_reviewed_pr = PullRequest.query.filter_by(repository_id=repo.id, status='reviewed').count()
+            count_reviewed_pr = PullRequest.query.filter_by(repository_id=repo.id, status='AI Reviewed').count()
 
             if last_reviewed_pr and last_reviewed_pr.llm_response_time:
                 # Convert llm_response_time to a human-readable format
