@@ -235,8 +235,8 @@ def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body,
     }
 
     github_response = github_request("POST", url, installation_id, data)
-    print("github_response for ai comment")
-    print(github_response)
+    # print("github_response for ai comment")
+    # print(github_response)
     return github_response
 
 def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, installation_id):
@@ -276,7 +276,8 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
                         line_number=comment['line_number'],
                         category=comment['category'],
                         severity=comment['severity'],
-                        pull_request_id=db_pull_request.id
+                        pull_request_id=db_pull_request.id,
+                        url=github_comment['html_url']
                     )
                     db.session.add(db_comment)
                 
