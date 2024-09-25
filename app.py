@@ -302,17 +302,17 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
 def signup():
     data = request.json
     username = data.get('username')
-    email = data.get('email')
+    email = data.get('email').lower()
     password = data.get('password')
     organizationName = data.get('organizationName')  # Ensure this matches your field name
     organizationType = data.get('organizationType')
 
     # Check if all details are provided
-    if not username or not password or not email or not organizationName:
+    if not username or not password or not email or not organizationName or not organizationType:
         return jsonify(message='All details are required'), 400
 
     # Check if the username already exists
-    if User.query.filter_by(username=username).first():
+    if User.query.filter_by(username=username).first() or User.query.filter_by(email=email).first():
         return jsonify(message='Username already exists'), 400
 
     # Create a new organization
