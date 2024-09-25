@@ -13,6 +13,7 @@ import os
 import json
 import openai
 import datetime
+import humanize
 from sqlalchemy import func
 
 
@@ -80,9 +81,11 @@ class Repository(db.Model):
     pull_requests = db.relationship('PullRequest', backref='repository', lazy=True)
     added_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     is_deleted = db.Column(db.Boolean, default=False)
+    installation_id = db.Column(db.String(80), nullable=True)
 
 class PullRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    pr_id = db.Column(db.Integer, nullable=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     status = db.Column(db.String(20), nullable=False)
@@ -95,6 +98,7 @@ class PullRequest(db.Model):
 
 class AIComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(200), nullable=True)
     content = db.Column(db.Text, nullable=False)
     file_name = db.Column(db.String(255), nullable=False)
     line_number = db.Column(db.Integer, nullable=False)
@@ -229,7 +233,11 @@ def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body,
         "path": path,
         "line": line
     }
-    return github_request("POST", url, installation_id, data)
+
+    github_response = github_request("POST", url, installation_id, data)
+    print("github_response for ai comment")
+    print(github_response)
+    return github_response
 
 def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, installation_id):
     try:
@@ -385,15 +393,16 @@ def github_after_auth_code():
 
     repository_data = authorised_repos_response.json()["repositories"]
     user = User.query.get(user_id)
-    organization = Organization.query.filter_by(id=user.organization_id).first()
-    organization.installation_id = installation_id
+    # organization = Organization.query.filter_by(id=user.organization_id).first()
+    # organization.installation_id = installation_id
     for repo in repository_data:
         if Repository.query.filter_by(repo_id=repo["id"]).first() is None:
-            repo_obj = Repository(name=repo["name"], url=repo["html_url"], repo_id=repo["id"], added_by=user_id, organization_id=user.organization_id)
+            repo_obj = Repository(name=repo["name"], url=repo["html_url"], repo_id=repo["id"], added_by=user_id, organization_id=user.organization_id, installation_id=installation_id)
             db.session.add(repo_obj)
         else:
             repo_obj = Repository.query.filter_by(repo_id=repo["id"]).first()
             repo_obj.is_deleted = False
+            repo_obj.installation_id = installation_id
 
     db.session.commit()
 
@@ -424,11 +433,11 @@ def github_webhook():
             repo_data = payload.get('repository', {})
             try:
                 # Create entries in PullRequest table
-                repo = Repository.query.filter_by(repo_id=repo_data.get('id')).first()
-                organization = Organization.query.filter_by(id=repo.organization_id).first()
-                installation_id = organization.installation_id
+                repo = Repository.query.filter_by(repo_id=repo_data.get('id'), is_deleted=False).first()
+                # organization = Organization.query.filter_by(id=repo.organization_id).first()
+                installation_id = repo.installation_id
                 new_pr = PullRequest(
-                    id=pr_data.get('id'),
+                    pr_id=pr_data.get('id'),
                     title=pr_data.get('title'),
                     description=pr_data.get('body'),
                     repository_id=repo.id,
@@ -478,9 +487,36 @@ def get_repositories():
     try:
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
+        
+        # Get all repositories for the user's organization
         repositories = Repository.query.filter_by(organization_id=user.organization_id, is_deleted=False).all()
-        repo_list = [{"id": repo.repo_id, "name": repo.name, "url": repo.url, "organization_id": repo.organization_id} for repo in repositories]
+
+        repo_list = []
+        
+        for repo in repositories:
+            # Query the latest llm_response_time for the repository's pull requests
+            last_reviewed_pr = PullRequest.query.filter_by(repository_id=repo.id).order_by(PullRequest.llm_response_time.desc()).first()
+            count_reviewed_pr = PullRequest.query.filter_by(repository_id=repo.id, status='reviewed').count()
+
+            if last_reviewed_pr and last_reviewed_pr.llm_response_time:
+                # Convert llm_response_time to a human-readable format
+                last_reviewed_time = last_reviewed_pr.llm_response_time
+                now = datetime.datetime.now()
+                last_reviewed = humanize.naturaltime(now - last_reviewed_time)
+            else:
+                last_reviewed = "Not Reviewed"
+
+            repo_list.append({
+                "id": repo.id,
+                "name": repo.name,
+                "url": repo.url,
+                "organization_id": repo.organization_id,
+                "last_reviewed": last_reviewed,
+                "reviewed_prs": count_reviewed_pr
+            })
+
         return jsonify({"repositories": repo_list}), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -498,7 +534,7 @@ def get_pull_requests():
             ).all()
         else:
             pull_requests = PullRequest.query.join(Repository).filter(
-                Repository.repo_id == repo_id,
+                Repository.id == repo_id,
                 Repository.organization_id == user.organization_id,
                 Repository.is_deleted == False
             ).all()
@@ -507,7 +543,8 @@ def get_pull_requests():
             'id': pr.id,
             'title': pr.title,
             'repository_name': pr.repository.name,
-            'status': pr.status
+            'status': pr.status,
+            'url': pr.url
         } for pr in pull_requests]
 
         return jsonify(pr_list), 200
@@ -528,7 +565,9 @@ def get_ai_comments(pr_id):
             "content": comment.content,
             "file_name": comment.file_name,
             "line_number": comment.line_number,
-            "created_at": comment.created_at.isoformat()
+            "created_at": comment.created_at.isoformat(),
+            "url": comment.url
+
         } for comment in ai_comments]
         
         return jsonify(comments_list), 200
