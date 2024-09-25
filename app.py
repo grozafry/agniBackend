@@ -289,6 +289,7 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
         
         db_pull_request.status='AI Reviewed'
         db_pull_request.llm_response = json.dumps(all_review_comments)
+        db_pull_request.llm_response_time = datetime.datetime.now()
         db.session.commit()
 
     except Exception as e:
