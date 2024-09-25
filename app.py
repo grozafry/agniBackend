@@ -57,6 +57,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(128))
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'))
     github_access_token = db.Column(db.String(255))  # Store GitHub access token
+    is_email_verified = db.Column(db.Boolean, default=False)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -67,10 +68,11 @@ class User(db.Model):
 class Organization(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     git_org_id = db.Column(db.String(80), nullable=True) #org id from github
-    name = db.Column(db.String(80), unique=True, nullable=False)
+    name = db.Column(db.String(80), nullable=True)
     users = db.relationship('User', backref='organization', lazy=True)
     repositories = db.relationship('Repository', backref='organization', lazy=True)
     installation_id = db.Column(db.String(80), nullable=True)
+    type = db.Column(db.String(80), nullable=True)
 
 class Repository(db.Model):
     id = db.Column(db.Integer, primary_key=True) 
@@ -302,7 +304,8 @@ def signup():
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
-    organizationName = data.get('organisationName')  # Ensure this matches your field name
+    organizationName = data.get('organizationName')  # Ensure this matches your field name
+    organizationType = data.get('organizationType')
 
     # Check if all details are provided
     if not username or not password or not email or not organizationName:
@@ -313,7 +316,7 @@ def signup():
         return jsonify(message='Username already exists'), 400
 
     # Create a new organization
-    new_org = Organization(name=organizationName)
+    new_org = Organization(name=organizationName, type=organizationType)
     db.session.add(new_org)
     db.session.commit()  # Commit to get the organization ID
 
