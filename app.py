@@ -213,7 +213,7 @@ def analyze_code_changes(file_patch):
     openai.api_key = openai_api_key
 
     # Define the prompt to be used for GPT model
-    prompt = f"""You are a Senior Software Engineer conducting a code review. Analyze the following code changes and provide a code review with line-specific comments (get line number from code diff). Provide specific, actionable feedback. Format your response as a list of JSON objects, each containing 'line_number', 'category', 'severity', and 'comment' fields. Category should be one of these - Security, Functionality, Performance, Maintainability, Scalability, Compatibility, Accessibility, Internationalization and Localization, Testing, Code Style, Regulatory Compliance. Severity should be one of these - Critical, High, Medium, Low, Informational. Response should only contain list of JSON objects: {file_patch} Code Review:"""
+    prompt = f"""You are a Senior Software Engineer conducting a code review. Analyze the following code changes and provide a code review with line-specific comments (get line number from code diff). Provide specific, actionable feedback. Format your response as a list of JSON objects, each containing 'line_number', 'category', 'severity', and 'comment' fields. Category should be one of these - Security, Functionality, Performance, Maintainability, Scalability, Compatibility, Accessibility, Internationalization and Localization, Testing, Code Style, Regulatory Compliance. Severity should be one of these - Critical, High, Medium, Low, Informational. Response should only contain list of JSON objects. List can be empty if no issues are found but still return list in every case : {file_patch} Code Review:"""
 
     # Call OpenAI API using the ChatCompletion endpoint
     response = openai.ChatCompletion.create(
@@ -239,7 +239,8 @@ def analyze_code_changes(file_patch):
     if len(parts) > 1:
         json_part = parts[1].split('```')[0].strip()  # Remove any trailing markers like ```
     else:
-        raise ValueError("No JSON part found in the content.")
+        # raise ValueError("No JSON part found in the content.")
+        return json.dumps([])
 
     # Load and pretty-print the cleaned JSON content
     try:
@@ -653,6 +654,16 @@ def myfun(a, b):
     return jsonify(response)
 
 
+@app.route('/manual_review/<int:pr_id>', methods=['GET'])
+def manual_review(pr_id):
+    db_pull_request = PullRequest.query.get(pr_id)
+    repo = Repository.query.get(db_pull_request.repository_id)
+    installation_id = "55267967" #repo.installation_id
+    repo_owner = "grozafry" #repo.owner
+    repo_name = repo.name
+    pr_number = 6
+
+    process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, installation_id)
 
 @app.route('/test_anthropic', methods=['GET'])
 def test_anthropic():
