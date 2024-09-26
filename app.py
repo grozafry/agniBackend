@@ -213,16 +213,25 @@ def analyze_code_changes(file_patch):
     openai.api_key = openai_api_key
 
     # Define the prompt to be used for GPT model
-    prompt = f"""You are a Senior Software Engineer conducting a code review. 
-    Analyze the following code changes and provide a code review with line-specific comments. 
-    Provide specific, actionable feedback. Provide code styled fixes or suggestions wherever possible. 
-    Include code snippets in your response as much as possible. 
-    Format your response as a list of JSON objects, each containing 'line_number', 'category', 'severity', and 'comment' fields. 
-    Line number should accurately represent the line number where the issue is found.
-    Category should be one of these - Security, Functionality, Performance, Maintainability, Scalability, Compatibility, Accessibility, Internationalization and Localization, Testing, Code Style, Regulatory Compliance. 
-    Severity should be one of these - Critical, High, Medium, Low, Informational. 
-    Response should only contain list of JSON objects. 
-    List can be empty if no issues are found but still return list in every case : {file_patch} Code Review:"""
+    prompt = f"""As a Senior Software Engineer, conduct a thorough code review of the following changes. 
+    Provide specific, actionable feedback with code-styled fixes or suggestions wherever possible.
+    
+    Important guidelines:
+    1. Associate each comment with the EXACT line number where the relevant code operation occurs.
+    2. Focus on the lines that have been added or modified in the patch.
+    3. Prioritize comments on actual code operations, not surrounding context or whitespace.
+    4. For operations that span multiple lines, comment on the line where the operation begins.
+    
+    Format your response as a list of JSON objects, each containing:
+    - 'line_number': The exact line number where the code operation occurs
+    - 'category': One of [Security, Functionality, Performance, Maintainability, Scalability, Compatibility, Accessibility, Internationalization and Localization, Testing, Code Style, Regulatory Compliance]
+    - 'severity': One of [Critical, High, Medium, Low, Informational]
+    - 'comment': Your detailed review comment, including code snippets for suggested improvements
+    
+    Analyze this code patch:
+    {file_patch}
+    
+    Code Review:"""
 
     # Call OpenAI API using the ChatCompletion endpoint
     response = openai.ChatCompletion.create(
