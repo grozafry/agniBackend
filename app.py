@@ -201,30 +201,57 @@ def get_pr_files(repo_owner, repo_name, pr_number, installation_id):
     return github_request("GET", url, installation_id)
 
 def analyze_code_changes(file_patch):
-    """Analyze code changes using OpenAI's GPT-3.5 and generate line-specific comments."""
-#     return json.dumps([
-#     {
-#         "line_number": 21,
-#         "comment": "Consider removing comments that do not provide meaningful information or are irrelevant to the functionality of the repository. Comments like this can clutter the code and reduce readability."
-#     },
-#     {
-#         "line_number": 22,
-#         "comment": "Avoid leaving comments such as 'These comments are of no consequence.' It's best practice to add comments that explain why certain code exists, describe complex logic, or note important details, rather than trivial remarks."
-#     }
-# ]
-# )
-    prompt = f"""You are a Senior Software Engineer conducting a code review. Analyze the following code changes and provide a code review with line-specific comments (get line number from code  diff) . Provide specific, actionable feedback. Format your response as a list of JSON objects, each containing 'line_number', 'category', 'severity', 'comment' fields. Category should be one of these - Security,Functionality,Performance,Maintainability,Scalability,Compatibilit,Accessibility,Internationalization and Localization,Testing,Code Style,Regulatory Compliance. Severity should be one of these - Critical, High, Medium, Low, Informational:{file_patch}Code Review:"""
-    import os 
-    gemini_api_key = os.getenv("GEMINI_API_KEY")
-    import google.generativeai as genai
+    """Analyze code changes using OpenAI's GPT API and generate line-specific comments."""
     
+    import openai
+    import os
 
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
-    cleaned_response = response.text.strip().strip('```json').strip('```').strip()
-    print(cleaned_response)
-    return cleaned_response
+    # Use your OpenAI API key
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    
+    # Set up OpenAI API key
+    openai.api_key = openai_api_key
+
+    # Define the prompt to be used for GPT model
+    prompt = f"""You are a Senior Software Engineer conducting a code review. Analyze the following code changes and provide a code review with line-specific comments (get line number from code diff). Provide specific, actionable feedback. Format your response as a list of JSON objects, each containing 'line_number', 'category', 'severity', and 'comment' fields. Category should be one of these - Security, Functionality, Performance, Maintainability, Scalability, Compatibility, Accessibility, Internationalization and Localization, Testing, Code Style, Regulatory Compliance. Severity should be one of these - Critical, High, Medium, Low, Informational. Response should only contain list of JSON objects: {file_patch} Code Review:"""
+
+    # Call OpenAI API using the ChatCompletion endpoint
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a Senior Software Engineer and an expert code reviewer."},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=1000,
+        temperature=0.7,
+    )
+
+    # Extract and clean up the response
+    message_content = response['choices'][0]['message']['content']
+
+    # Print the raw message content for debugging
+    print("Raw response content:\n", message_content)
+
+    # Split the content to separate the JSON part
+    parts = message_content.split('```json')
+
+    # If the JSON block is present, extract it
+    if len(parts) > 1:
+        json_part = parts[1].split('```')[0].strip()  # Remove any trailing markers like ```
+    else:
+        raise ValueError("No JSON part found in the content.")
+
+    # Load and pretty-print the cleaned JSON content
+    try:
+        cleaned_json = json.loads(json_part)
+    except json.JSONDecodeError as e:
+        print(f"JSON Decode Error: {e}")
+        print("JSON part that caused the error:\n", json_part)
+        raise ValueError("The extracted content is not a valid JSON.") from e
+
+    # Return a properly formatted JSON string for display
+    return json.dumps(cleaned_json, indent=4)
+
 
 def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body, line, category, severity, installation_id):
     """Post a review comment to the GitHub PR."""
@@ -616,22 +643,16 @@ def get_metrics():
 
 @app.route('/test_openai', methods=['GET'])
 def test_openai():
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-    file_patch = "print('hello world! Hey doc is how are you today?')"
-    prompt = f"Analyze the following code changes and provide a code review with line-specific comments. Format your response as a list of JSON objects, each containing 'line_number' and 'comment' fields:\n\n{file_patch}\n\nCode Review:"
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a senior software engineer conducting a code review. Provide specific, actionable feedback."},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=1000,
-        n=1,
-        stop=None,
-        temperature=0.7,
-    )
-    
-    return response.choices[0].message['content'].strip()
+    patch = """
+def myfun(a, b):
+    return a/0
+"""
+    response = analyze_code_changes(patch)
+    print(response)
+
+    return jsonify(response)
+
+
 
 @app.route('/test_anthropic', methods=['GET'])
 def test_anthropic():
