@@ -261,8 +261,11 @@ def analyze_code_changes(file_patch):
     #     return json.dumps([])
 
     # Load and pretty-print the cleaned JSON content
+    cleaned_content = message_content.strip()
+    cleaned_content = cleaned_content.replace('```json', '').replace('```', '').strip()
+
     try:
-        cleaned_json = json.loads(message_content)
+        cleaned_json = json.loads(cleaned_content)
     except json.JSONDecodeError as e:
         print(f"JSON Decode Error: {e}")
         raise ValueError("The extracted content is not a valid JSON.") from e
