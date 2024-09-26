@@ -241,7 +241,7 @@ def analyze_code_changes(file_patch):
             {"role": "user", "content": prompt}
         ],
         max_tokens=1000,
-        temperature=0.7,
+        temperature=0.2,
     )
 
     # Extract and clean up the response
