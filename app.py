@@ -233,25 +233,24 @@ def analyze_code_changes(file_patch):
     print("Raw response content:\n", message_content)
 
     # Split the content to separate the JSON part
-    parts = message_content.split('```json')
+    # parts = message_content.split('```json')
 
     # If the JSON block is present, extract it
-    if len(parts) > 1:
-        json_part = parts[1].split('```')[0].strip()  # Remove any trailing markers like ```
-    else:
-        # raise ValueError("No JSON part found in the content.")
-        return json.dumps([])
+    # if len(parts) > 1:
+    #     json_part = parts[1].split('```')[0].strip()  # Remove any trailing markers like ```
+    # else:
+    #     # raise ValueError("No JSON part found in the content.")
+    #     return json.dumps([])
 
     # Load and pretty-print the cleaned JSON content
     try:
-        cleaned_json = json.loads(json_part)
+        cleaned_json = json.loads(message_content)
     except json.JSONDecodeError as e:
         print(f"JSON Decode Error: {e}")
-        print("JSON part that caused the error:\n", json_part)
         raise ValueError("The extracted content is not a valid JSON.") from e
 
     # Return a properly formatted JSON string for display
-    return json.dumps(cleaned_json, indent=4)
+    return json.dumps(cleaned_json)
 
 
 def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body, line, category, severity, installation_id):
