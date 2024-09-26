@@ -217,7 +217,7 @@ def analyze_code_changes(file_patch):
 
     # Call OpenAI API using the ChatCompletion endpoint
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are a Senior Software Engineer and an expert code reviewer."},
             {"role": "user", "content": prompt}
