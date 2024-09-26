@@ -213,7 +213,16 @@ def analyze_code_changes(file_patch):
     openai.api_key = openai_api_key
 
     # Define the prompt to be used for GPT model
-    prompt = f"""You are a Senior Software Engineer conducting a code review. Analyze the following code changes and provide a code review with line-specific comments. Provide specific, actionable feedback. Provide code styled fixes or suggestions wherever possible. Include code snippets in your response wherever applicable. Format your response as a list of JSON objects, each containing 'line_number', 'category', 'severity', and 'comment' fields. Category should be one of these - Security, Functionality, Performance, Maintainability, Scalability, Compatibility, Accessibility, Internationalization and Localization, Testing, Code Style, Regulatory Compliance. Severity should be one of these - Critical, High, Medium, Low, Informational. Response should only contain list of JSON objects. List can be empty if no issues are found but still return list in every case : {file_patch} Code Review:"""
+    prompt = f"""You are a Senior Software Engineer conducting a code review. 
+    Analyze the following code changes and provide a code review with line-specific comments. 
+    Provide specific, actionable feedback. Provide code styled fixes or suggestions wherever possible. 
+    Include code snippets in your response as much as possible. 
+    Format your response as a list of JSON objects, each containing 'line_number', 'category', 'severity', and 'comment' fields. 
+    Line number should accurately represent the line number where the issue is found.
+    Category should be one of these - Security, Functionality, Performance, Maintainability, Scalability, Compatibility, Accessibility, Internationalization and Localization, Testing, Code Style, Regulatory Compliance. 
+    Severity should be one of these - Critical, High, Medium, Low, Informational. 
+    Response should only contain list of JSON objects. 
+    List can be empty if no issues are found but still return list in every case : {file_patch} Code Review:"""
 
     # Call OpenAI API using the ChatCompletion endpoint
     response = openai.ChatCompletion.create(
