@@ -210,14 +210,13 @@ def analyze_code_changes(file_patch):
     
     import openai
     import os
+    import re
 
     # Use your OpenAI API key
     openai_api_key = os.getenv("OPENAI_API_KEY")
     
     # Set up OpenAI API key
     openai.api_key = openai_api_key
-
-    # Define the prompt to be used for GPT model
     prompt = f"""As a Senior Software Engineer, conduct a thorough code review of the following changes. 
     Provide specific, actionable feedback with code-styled fixes or suggestions wherever possible.
     
@@ -231,68 +230,110 @@ def analyze_code_changes(file_patch):
     - 'line_number': The exact line number where the code operation occurs
     - 'category': One of [Security, Functionality, Performance, Maintainability, Scalability, Compatibility, Accessibility, Internationalization and Localization, Testing, Code Style, Regulatory Compliance]
     - 'severity': One of [Critical, High, Medium, Low, Informational]
-    - 'comment': Your detailed review comment, including code snippets for suggested improvements
+    - 'comment': Your detailed review comment explaining why the comment was raised
+    - 'coding_language': Language in which code has been written
+    - 'code_snippet': Code snippet with suggested modifications and / or examples to fix the issue
     
     Analyze this code patch:
     {file_patch}
     
     Code Review:"""
 
-    # Call OpenAI API using the ChatCompletion endpoint
     response = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model="gpt-4o",  # Using GPT-4 for better accuracy
         messages=[
             {"role": "system", "content": "You are a Senior Software Engineer and an expert code reviewer."},
             {"role": "user", "content": prompt}
         ],
         max_tokens=1000,
-        temperature=0.2,
+        temperature=0.2,  # Lower temperature for more consistent output
     )
 
     # Extract and clean up the response
     message_content = response['choices'][0]['message']['content']
-
+    
     # Print the raw message content for debugging
     print("Raw response content:\n", message_content)
 
-    # Split the content to separate the JSON part
-    # parts = message_content.split('```json')
-
-    # If the JSON block is present, extract it
-    # if len(parts) > 1:
-    #     json_part = parts[1].split('```')[0].strip()  # Remove any trailing markers like ```
-    # else:
-    #     # raise ValueError("No JSON part found in the content.")
-    #     return json.dumps([])
-
-    # Load and pretty-print the cleaned JSON content
+    # Clean and parse the JSON content
     cleaned_content = message_content.strip()
-    cleaned_content = cleaned_content.replace('```json', '').replace('```', '').strip()
+    cleaned_content = re.sub(r'```json|```', '', cleaned_content).strip()
 
     try:
-        cleaned_json = json.loads(cleaned_content)
+        comments_list = json.loads(cleaned_content)
     except json.JSONDecodeError as e:
         print(f"JSON Decode Error: {e}")
-        raise ValueError("The extracted content is not a valid JSON.") from e
+        print("Attempting to fix malformed JSON...")
+        # Attempt to fix common JSON issues
+        cleaned_content = cleaned_content.replace("'", '"')  # Replace single quotes with double quotes
+        cleaned_content = re.sub(r'(\w+):', r'"\1":', cleaned_content)  # Add quotes to bare keys
+        try:
+            comments_list = json.loads(cleaned_content)
+        except json.JSONDecodeError:
+            print("Failed to parse JSON. Returning empty list.")
+            return []
 
-    # Return a properly formatted JSON string for display
-    return json.dumps(cleaned_json)
+    # Validate and clean up each comment
+    valid_comments = []
+    for comment in comments_list:
+        if all(key in comment for key in ['line_number', 'category', 'severity', 'comment']):
+            # Ensure line_number is an integer
+            try:
+                comment['line_number'] = int(comment['line_number'])
+            except ValueError:
+                print(f"Invalid line number: {comment['line_number']}. Skipping this comment.")
+                continue
+            
+            # Validate category and severity
+            valid_categories = ["Security", "Functionality", "Performance", "Maintainability", "Scalability", "Compatibility", "Accessibility", "Internationalization and Localization", "Testing", "Code Style", "Regulatory Compliance"]
+            valid_severities = ["Critical", "High", "Medium", "Low", "Informational"]
+            
+            # if comment['category'] not in valid_categories:
+            #     comment['category'] = "General"
+            # if comment['severity'] not in valid_severities:
+            #     comment['severity'] = "Informational"
+            
+            valid_comments.append(comment)
 
+    return valid_comments
 
-def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body, line, category, severity, installation_id):
-    """Post a review comment to the GitHub PR."""
+def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, comment, line_number, category, severity, installation_id, coding_language, code_snippet):
+    """Post a formatted review comment to the GitHub PR."""
     url = f"{app.config['GITHUB_API_BASE']}/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/comments"
-    data = {
-        "body": f"[{severity} - {category}] {body}",
-        "commit_id": commit_id,
-        "path": path,
-        "line": line
+    
+    severity_emojis = {
+        "Critical": "🚨",
+        "High": "⚠️",
+        "Medium": "⚠",
+        "Low": "ℹ️",
+        "Informational": "💡"
     }
 
-    github_response = github_request("POST", url, installation_id, data)
-    # print("github_response for ai comment")
-    # print(github_response)
-    return github_response
+    formatted_body = f"""
+## {severity_emojis.get(severity, '')} {severity} - {category}
+
+{comment}
+
+---
+### Suggestion:
+```{coding_language}
+{code_snippet}
+```
+
+> **Note:** This is an automated review comment. Please consider the context and relevance before applying any changes.
+
+**File:** `{path}`
+**Line:** {line_number}
+    """
+
+    data = {
+        "body": formatted_body,
+        "commit_id": commit_id,
+        "path": path,
+        "line": line_number
+    }
+    return github_request("POST", url, installation_id, data)
+
 
 # Set the maximum number of tokens for a PR review
 MAX_PR_REVIEW_TOKENS = 4000  # Adjust this value as needed
