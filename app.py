@@ -373,7 +373,7 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
             all_review_comments.append(review_comments)
 
             try:
-                comments_list = json.loads(review_comments)
+                comments_list = review_comments
                 for comment in comments_list:
                     # Post comment to GitHub
                     github_comment = post_review_comment(
