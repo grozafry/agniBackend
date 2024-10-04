@@ -15,6 +15,7 @@ import openai
 import datetime
 import humanize
 from sqlalchemy import func
+import tiktoken
 
 
 load_dotenv()
@@ -65,6 +66,8 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+MAX_FREE_REVIEWS_PER_ORG = 10
+
 class Organization(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     git_org_id = db.Column(db.String(80), nullable=True) #org id from github
@@ -73,6 +76,8 @@ class Organization(db.Model):
     repositories = db.relationship('Repository', backref='organization', lazy=True)
     installation_id = db.Column(db.String(80), nullable=True)
     type = db.Column(db.String(80), nullable=True)
+    pr_reviews_count = db.Column(db.Integer, default=0)  # New column to track PR reviews
+    max_free_reviews = db.Column(db.Integer, default=MAX_FREE_REVIEWS_PER_ORG)  # Limit for free trial
 
 class Repository(db.Model):
     id = db.Column(db.Integer, primary_key=True) 
@@ -289,12 +294,36 @@ def post_review_comment(repo_owner, repo_name, pr_number, commit_id, path, body,
     # print(github_response)
     return github_response
 
+# Set the maximum number of tokens for a PR review
+MAX_PR_REVIEW_TOKENS = 4000  # Adjust this value as needed
+
+def count_tokens(text):
+    """Count the number of tokens in the given text."""
+    encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")
+    return len(encoder.encode(text))
+
 def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, installation_id):
     try:
+        organization = Organization.query.filter_by(id=db_pull_request.repository.organization_id).first()
+        
+        # Check if the organization has reached the free trial limit
+        if organization.pr_reviews_count >= organization.max_free_reviews:
+            db_pull_request.status = 'Free Trial Limit Reached'
+            db.session.commit()
+            return  # Exit the function without processing the PR
+        
         pr = fetch_pr_details(repo_owner, repo_name, pr_number, installation_id)
         commit_id = pr['head']['sha']
         
         files = get_pr_files(repo_owner, repo_name, pr_number, installation_id)
+
+        total_tokens = sum(count_tokens(file.get('patch', '')) for file in files)
+
+        if total_tokens > MAX_PR_REVIEW_TOKENS:
+            db_pull_request.status = 'Ignored due to large size'
+            db.session.commit()
+            app.logger.info(f"PR {pr_number} ignored due to large size ({total_tokens} tokens)")
+            return
 
         all_review_comments = []
         
@@ -349,7 +378,7 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
 @app.route('/auth/signup', methods=['POST'])
 def signup():
     data = request.json
-    username = data.get('username')
+    username = data.get('username').lower()
     email = data.get('email').lower()
     password = data.get('password')
     organizationName = data.get('organizationName')  # Ensure this matches your field name
@@ -360,8 +389,15 @@ def signup():
         return jsonify(message='All details are required'), 400
 
     # Check if the username already exists
-    if User.query.filter_by(username=username).first() or User.query.filter_by(email=email).first():
+    if User.query.filter_by(username=username).first():
         return jsonify(message='Username already exists'), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify(message='Email already exists'), 400
+
+    if Organization.query.filter_by(name=organizationName).first():
+        return jsonify(message='Organization already exists'), 400
+
 
     # Create a new organization
     new_org = Organization(name=organizationName, type=organizationType)
@@ -389,7 +425,7 @@ def login():
     if user and user.check_password(password):
         access_token = create_access_token(identity=user.id)
         refresh_token = create_refresh_token(identity=user.id)
-        return jsonify(access_token=access_token, refresh_token=refresh_token), 200
+        return jsonify(access_token=access_token, refresh_token=refresh_token, is_email_verified=user.is_email_verified), 200
     else:
         return jsonify(message='Invalid credentials'), 401
 
@@ -489,6 +525,13 @@ def github_webhook():
                 repo = Repository.query.filter_by(repo_id=repo_data.get('id'), is_deleted=False).first()
                 # organization = Organization.query.filter_by(id=repo.organization_id).first()
                 installation_id = repo.installation_id
+
+                 # Check if the organization has reached the free trial limit
+                organization = Organization.query.get(repo.organization_id)
+                if organization.pr_reviews_count >= organization.max_free_reviews:
+                    return jsonify({'message': 'Free trial limit reached'}), 200
+
+
                 new_pr = PullRequest(
                     pr_id=pr_data.get('id'),
                     title=pr_data.get('title'),
@@ -734,6 +777,21 @@ def myfun(a, b):
     print(response.text)
     cleaned_response = response.text.strip().strip('```json').strip('```').strip()
     return cleaned_response
+
+@app.route('/remaining_reviews', methods=['GET'])
+@jwt_required()
+def get_remaining_reviews():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    organization = Organization.query.get(user.organization_id)
+    
+    remaining_reviews = max(0, organization.max_free_reviews - organization.pr_reviews_count)
+    
+    return jsonify({
+        'remaining_reviews': remaining_reviews,
+        'total_reviews': organization.pr_reviews_count,
+        'max_free_reviews': organization.max_free_reviews
+    }), 200
 
 if __name__ == '__main__':
     with app.app_context():
