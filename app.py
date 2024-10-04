@@ -113,6 +113,8 @@ class AIComment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.datetime.now)
     severity = db.Column(db.String(20), nullable=True)
     category = db.Column(db.String(20), nullable=True)
+    coding_language = db.Column(db.String(20), nullable=True)
+    code_snippet = db.Column(db.Text, nullable=True)
 
 
 import uuid
@@ -386,7 +388,9 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
                         comment['line_number'],
                         comment['category'],
                         comment['severity'],
-                        installation_id
+                        installation_id,
+                        comment['coding_language'],
+                        comment['code_snippet']    
                     )
                     
                     # Save comment to database
@@ -397,7 +401,9 @@ def process_pull_request(repo_owner, repo_name, pr_number, db_pull_request, inst
                         category=comment['category'],
                         severity=comment['severity'],
                         pull_request_id=db_pull_request.id,
-                        url=github_comment['html_url']
+                        url=github_comment['html_url'],
+                        coding_language = comment['coding_language'],
+                        code_snippet = comment['code_snippet']
                     )
                     db.session.add(db_comment)
                 
