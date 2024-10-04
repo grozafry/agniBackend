@@ -32,6 +32,8 @@ app.config['GITHUB_OAUTH_REDIRECT_URI'] = os.getenv('GITHUB_OAUTH_REDIRECT_URI')
 app.config['WEBHOOK_SECRET'] = os.getenv('WEBHOOK_SECRET')
 app.config['GITHUB_API_BASE'] = os.getenv('GITHUB_API_BASE')
 app.config['FRONTEND_URL'] = os.getenv('FRONTEND_URL')
+app.config['TOKEN_SIGN_PRIVATE_KEY'] = os.getenv('TOKEN_SIGN_PRIVATE_KEY')
+app.config['APP_ID'] = os.getenv('APP_ID')
 
 
 import logging
@@ -133,36 +135,8 @@ def github_app_install_url():
     return jsonify({"url": github_login_url}), 200  
 
 def get_jwt_from_private_key():
-    private_key = """
------BEGIN RSA PRIVATE KEY-----
-MIIEpQIBAAKCAQEAw90xbMYEjdlDRurEVN8BwbRSWN21Llh5YF3JRlVRs1Bc8F7u
-7Rwh9ytBld0W0h2XUYtVE8Y8ma3mYxAi7Q2BKwdWzuBngVTAsb9MsanAZdslPXE9
-muo3ueCG1u0Dkjx8gLMp854d+74EhhVKpTzadtPTfyCATbkysCKrEoUDcVRNZmKk
-JUShjKHRG5DSOn3sAE+TERf4nqG7YhmmE5HsoS4AJ24bPc9I3kf9SzLkas4TvFk6
-LrexeLkypZvi8rU/BhEcQI9/gN6MW/ycB3yF1x0RSkTOPrjziTUN8l09ipCgSWfS
-FhNY85OdPj2puMc0mTXyI9+O4BX9spQuDID9AwIDAQABAoIBAQCjyMzyy6e1QnAa
-1mi1HALpCzQtMcC3b66X4fVUxjXav6HoM0qSporUmKxweIAD1lDaFKxhK80zKZNV
-VYIPPtK7u5hgyJBlOw0j1fd5PZ0wz4+VkKNWbvOIkPPQuEPbPo9SRAAZwygJgn1f
-7mAMSxXYdgwO64u+8tYrKeJqSyZ01fZ/oRrIwbM5/tpGgTfG28Ph/an8Efr8Fbb/
-Akm5Pe84pc4RucAdp9WJ8On3c5RLDSTuAZFGIZnWotjHYc0L4edAzepP/AlzPQaA
-apWIVDVYpbzW8pcDQ6wsKssK7WfwIMyMtCk63bSuKZan1/3NvNjrL1G8CCV6st59
-4UeIvIrRAoGBAOXCwRm18gTrOOYYXm1K//d8CFliGAyvSLQgSrqHtgg5mQwHVVRh
-B13Vjv9ykRKQffF9Bc9QbSX3FhI8RD042r2J1KXsOCnvNTvnzL+1eYFxy7iQF8cm
-ODpbVW6RvGY6su6hbFfwJcGmt/8xzQkVedMbJcvMz56ZrJu3X6hFwEa7AoGBANo7
-cKY0zHZRb+x1e2VLex7ycp8hhor7d2olBcWAP2z1FFJtOGzqQzEzzvE9zNHt42e8
-kKzexd3m5eCRbbZlA5f+LSKdsBrsq257wjnajyEEccW223Z1qxI0hChxgOZFhmc/
-7lUdOJvy4haDnrFOaHnQzLTMYvkKAXgjaEFJOdJZAoGBAJ7bCKe+JJdCCxULxD3M
-nS1/lEY4jGg4yQvBR+mv6yvEpwyqBVVRwMYf4b68d5FeVbWhu2KbONwG+juhb4zk
-wlhJ87zElhBoU2YX3niuAFR/WVtCRS5sPnQasfbAzIHiE9Tpxv8GCxTZMF5BEII3
-VwOewYMnGGWP2sfPAVRW5ZoBAoGATcNqg79CsFKamF7Qpqq7564rC+tNXw72YVtp
-8BOgBjpakHic56qeYNT+Q9Zqus+S/e8ieoczaLwTY+9OcfUSz8Fh4fjgvOdiuw7c
-ifMIl5JW3EYpc8/AMs+F3Ed90BAsMXSFf8zW1DM7PxyNms6+ydGOcEp4ZhebqGyt
-hL4MHZkCgYEAqXxJuSFtbvjXDOK1suSX7s/fyRSHMREtP56LA3tq+BULiBPz9YK9
-YgH+s3lNk0Z7pdHJcjtjnUJqjr2gq28VDkiFOF5pW+55N+R8bv7ZUu+2+PU6Qb+a
-9wuYvYEJfnomCDY2G/gVyjR+42dTlHr6hSPVrpgTHGyTFltL/+iU3DE=
------END RSA PRIVATE KEY-----
-"""
-    app_id = "999410"
+    private_key = app.config['TOKEN_SIGN_PRIVATE_KEY']
+    app_id = app.config['APP_ID']
 
     import time
     # Create JWT payload
