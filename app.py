@@ -34,6 +34,7 @@ app.config['GITHUB_API_BASE'] = os.getenv('GITHUB_API_BASE')
 app.config['FRONTEND_URL'] = os.getenv('FRONTEND_URL')
 app.config['TOKEN_SIGN_PRIVATE_KEY'] = os.getenv('TOKEN_SIGN_PRIVATE_KEY')
 app.config['APP_ID'] = os.getenv('APP_ID')
+app.config["GITHUB_APP_INSTALL_URL"] = os.getenv('GITHUB_APP_INSTALL_URL')
 
 
 import logging
@@ -129,7 +130,7 @@ def github_app_install_url():
     # Save the state and user_id mapping in a temporary store or database
     state=user_id
     
-    github_app_install_url = "https://github.com/apps/agnicodeaitest/installations/new"
+    github_app_install_url = app.config["GITHUB_APP_INSTALL_URL"]
 
     github_login_url = f"{github_app_install_url}?&state={state}"
     return jsonify({"url": github_login_url}), 200  
